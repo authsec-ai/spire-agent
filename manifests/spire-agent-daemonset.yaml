@@ -1,0 +1,235 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: spire
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-agent-cluster-role
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: spire
+
+---
+# EDIT THIS: Set your tenant_id and cluster_name
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent-config
+  namespace: spire
+data:
+  config.yaml: |
+    agent:
+      tenant_id: "your-tenant-uuid-here"          # <-- REPLACE THIS
+      node_id: "${NODE_NAME}"
+      data_dir: "/var/lib/spire-agent"
+      socket_path: "/run/spire/sockets/agent.sock"
+      renewal_threshold: "6h"
+
+    icp_service:
+      address: "https://prod.api.authsec.ai/spiresvc"
+      timeout: 30
+      max_retries: 3
+      retry_backoff: 5
+
+    attestation:
+      type: "kubernetes"
+      kubernetes:
+        token_path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        cluster_name: "production"                 # <-- REPLACE THIS (optional)
+      unix:
+        method: "procfs"
+
+    security:
+      cache_encryption_key: ""
+      cache_path: "/var/lib/spire-agent/cache/svid.cache"
+
+    logging:
+      level: "info"
+      format: "json"
+
+    health:
+      enabled: true
+      port: 8080
+      bind_address: "0.0.0.0"
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+  labels:
+    app: spire-agent
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+    spec:
+      serviceAccountName: spire-agent
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+
+      initContainers:
+        - name: init-socket-dir
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /run/spire/sockets && chmod 755 /run/spire/sockets"]
+          volumeMounts:
+            - name: spire-agent-socket-dir
+              mountPath: /run/spire/sockets
+
+        - name: init-tmp-dir
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /tmp && chmod 755 /tmp"]
+          volumeMounts:
+            - name: agent-tmp
+              mountPath: /tmp
+
+      containers:
+        - name: spire-agent
+          image: docker-repo-public.authsec.ai/spire-agent:latest
+          imagePullPolicy: Always
+          args: ["--config=/etc/spire-agent/config.yaml"]
+
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["SYS_PTRACE"]
+            seccompProfile:
+              type: RuntimeDefault
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/spire-agent
+              readOnly: true
+            - name: spire-agent-socket-dir
+              mountPath: /run/spire/sockets
+            - name: agent-data
+              mountPath: /var/lib/spire-agent
+            - name: agent-tmp
+              mountPath: /tmp
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sa-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 60
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+      volumes:
+        - name: config
+          configMap:
+            name: spire-agent-config
+        - name: spire-agent-socket-dir
+          hostPath:
+            path: /run/spire/sockets
+            type: DirectoryOrCreate
+        - name: agent-data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: agent-tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+                  audience: "spire-agent"
+
+      tolerations:
+        - operator: "Exists"
+          effect: "NoSchedule"
+        - operator: "Exists"
+          effect: "NoExecute"
+
+      priorityClassName: system-node-critical

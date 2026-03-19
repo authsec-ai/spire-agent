@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "spire-agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "spire-agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "spire-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "spire-agent.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "spire-agent.serviceAccountName" . }}
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+
+      initContainers:
+        - name: init-socket-dir
+          image: busybox:latest
+          command: ["sh", "-c", "rm -f /run/spire/sockets/agent.sock && mkdir -p /run/spire/sockets && chown 1000:1000 /run/spire/sockets && chmod 755 /run/spire/sockets"]
+          volumeMounts:
+            - name: spire-agent-socket-dir
+              mountPath: /run/spire/sockets
+
+        - name: init-tmp-dir
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /tmp && chmod 755 /tmp"]
+          volumeMounts:
+            - name: agent-tmp
+              mountPath: /tmp
+
+      containers:
+        - name: spire-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--config=/etc/spire-agent/config.yaml"]
+
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["SYS_PTRACE"]
+            seccompProfile:
+              type: RuntimeDefault
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/spire-agent
+              readOnly: true
+            - name: spire-agent-socket-dir
+              mountPath: /run/spire/sockets
+            - name: agent-data
+              mountPath: {{ .Values.agent.dataDir }}
+            - name: agent-tmp
+              mountPath: /tmp
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sa-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          {{- if .Values.health.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.health.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 60
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.health.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          {{- end }}
+
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "spire-agent.fullname" . }}-config
+        - name: spire-agent-socket-dir
+          hostPath:
+            path: /run/spire/sockets
+            type: DirectoryOrCreate
+        - name: agent-data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: agent-tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+                  audience: "spire-agent"
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}

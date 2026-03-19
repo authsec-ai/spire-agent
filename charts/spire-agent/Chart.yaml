@@ -1,0 +1,18 @@
+apiVersion: v2
+name: spire-agent
+description: SPIRE Agent - Workload identity agent by AuthSec
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - spire
+  - spiffe
+  - identity
+  - mtls
+  - zero-trust
+home: https://github.com/authsec-ai/spire-agent
+sources:
+  - https://github.com/authsec-ai/spire-agent
+maintainers:
+  - name: AuthSec Team
+    email: support@authsec.ai

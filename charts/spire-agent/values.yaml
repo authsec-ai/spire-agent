@@ -1,0 +1,57 @@
+# SPIRE Agent Helm Chart — values.yaml
+# Only tenantId is required. Everything else has sensible defaults.
+
+# REQUIRED: Your tenant UUID from AuthSec
+tenantId: ""
+
+# Optional: cluster name for multi-cluster setups
+clusterName: "production"
+
+image:
+  repository: docker-repo-public.authsec.ai/spire-agent
+  tag: "latest"
+  pullPolicy: Always
+
+icpService:
+  address: "https://prod.api.authsec.ai/spiresvc"
+  timeout: 30
+  maxRetries: 3
+  retryBackoff: 5
+
+agent:
+  socketPath: "/run/spire/sockets/agent.sock"
+  dataDir: "/var/lib/spire-agent"
+  renewalThreshold: "6h"
+
+logging:
+  level: "info"
+  format: "json"
+
+health:
+  enabled: true
+  port: 8080
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+tolerations:
+  - operator: "Exists"
+    effect: "NoSchedule"
+  - operator: "Exists"
+    effect: "NoExecute"
+
+nodeSelector: {}
+
+priorityClassName: "system-node-critical"
+
+serviceAccount:
+  create: true
+  name: "spire-agent"
+
+rbac:
+  create: true

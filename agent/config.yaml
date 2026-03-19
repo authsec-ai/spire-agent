@@ -1,0 +1,86 @@
+# ICP Agent Configuration
+
+agent:
+  # Tenant identifier (provided by AuthSec)
+  tenant_id: "477e9f97-d8a9-442a-8d92-f771393fab66"
+
+  # Unique node identifier
+  node_id: "test-node-1"
+
+  # Data directory for persistent storage
+  data_dir: "./data"
+
+  # Socket path for Workload API
+  # On Windows, use TCP socket (e.g., "tcp://127.0.0.1:4000")
+  # On Linux, use Unix socket (e.g., "./data/api.sock")
+  socket_path: "tcp://127.0.0.1:4000"
+
+  # Agent SVID renewal threshold (renew when TTL < this duration)
+  renewal_threshold: "6h"
+
+icp_service:
+  # ICP service address
+  # Use https:// for production with proper TLS
+  # Use http:// for local development without TLS
+  address: "https://prod.api.authsec.ai/spiresvc"
+
+  # Trust bundle path (CA certificate for ICP service)
+  trust_bundle_path: "./trust-bundle.pem"
+
+  # Connection timeout
+  timeout: 30
+
+  # Retry configuration
+  max_retries: 3
+  retry_backoff: 5
+
+attestation:
+  # Attestation type: kubernetes, docker, unix
+  type: "unix"
+
+  # Kubernetes-specific configuration
+  kubernetes:
+    # Service account token path
+    token_path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+    # Cluster name (optional, extracted from token if available)
+    cluster_name: ""
+
+  # Docker-specific configuration
+  docker:
+    # Docker socket path
+    socket_path: "/var/run/docker.sock"
+
+  # Unix-specific configuration
+  unix:
+    # Process verification method
+    method: "procfs"  # procfs or systemd
+
+security:
+  # Encryption key for certificate cache (auto-generated if not provided)
+  # Should be 32 bytes base64-encoded for AES-256
+  cache_encryption_key: ""
+
+  # Certificate cache path
+  cache_path: "./data/cache/svid.cache"
+
+logging:
+  # Log level: debug, info, warning, error
+  level: "debug"
+
+  # Log format: json or console
+  format: "console"
+
+  # Log file path (empty for stdout only)
+  file_path: ""
+
+# Health check configuration
+health:
+  # Enable health check endpoint
+  enabled: true
+
+  # Health check port (separate from Workload API socket)
+  port: 8080
+
+  # Health check bind address
+  bind_address: "127.0.0.1"

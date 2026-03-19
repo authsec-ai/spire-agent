@@ -1,0 +1,121 @@
+# ICP Agent Configuration for Kubernetes
+# This configuration is optimized for running the agent as a DaemonSet in Kubernetes
+
+agent:
+  # Tenant identifier (override via TENANT_ID environment variable)
+  tenant_id: "${TENANT_ID}"
+
+  # Node identifier (override via NODE_NAME environment variable from Downward API)
+  node_id: "${NODE_NAME}"
+
+  # Data directory for persistent storage
+  data_dir: "/var/lib/icp-agent"
+
+  # Socket path for Workload API
+  # Use Unix socket in Kubernetes (shared via hostPath volume)
+  socket_path: "/run/spire/sockets/agent.sock"
+
+  # Agent SVID renewal threshold (renew when TTL < this duration)
+  renewal_threshold: "6h"
+
+icp_service:
+  # ICP service address (use Kubernetes service DNS)
+  # Format: http://<service-name>.<namespace>.svc.cluster.local:<port>
+  address: "${ICP_SERVICE_URL:-https://prod.api.authsec.ai/spiresvc}"
+
+  # Trust bundle path (CA certificate for ICP service)
+  trust_bundle_path: "/etc/icp-agent/ca-bundle.pem"
+
+  # Connection timeout
+  timeout: 30
+
+  # Retry configuration
+  max_retries: 3
+  retry_backoff: 5
+
+attestation:
+  # Attestation type: kubernetes (primary), unix (fallback)
+  type: "kubernetes"
+
+  # Kubernetes-specific configuration
+  kubernetes:
+    # Service account token path (projected volume)
+    token_path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+    # Cluster name (override via CLUSTER_NAME environment variable)
+    cluster_name: "${CLUSTER_NAME:-production}"
+
+    # Enable TokenReview API validation (production-grade)
+    use_token_review: true
+
+    # Kubernetes API server URL (auto-detected from environment)
+    api_server_url: ""  # Leave empty for auto-detection
+
+  # Unix-specific configuration (fallback for non-containerized processes)
+  unix:
+    # Process verification method
+    method: "procfs"
+
+security:
+  # Encryption key for certificate cache (auto-generated if not provided)
+  # Should be 32 bytes base64-encoded for AES-256
+  cache_encryption_key: ""
+
+  # Certificate cache path
+  cache_path: "/var/lib/icp-agent/cache/svid.cache"
+
+logging:
+  # Log level: debug, info, warning, error
+  level: "${LOG_LEVEL:-info}"
+
+  # Log format: json (recommended for Kubernetes)
+  format: "json"
+
+  # Log file path (empty for stdout only, recommended for Kubernetes)
+  file_path: ""
+
+# Health check configuration
+health:
+  # Enable health check endpoint
+  enabled: true
+
+  # Health check port (for Kubernetes probes)
+  port: 8080
+
+  # Health check bind address
+  bind_address: "0.0.0.0"
+
+# Workload attestation plugins
+plugins:
+  # Enable Kubernetes plugin (primary)
+  kubernetes:
+    enabled: true
+    priority: 10
+
+  # Enable Unix plugin (fallback for host processes)
+  unix:
+    enabled: true
+    priority: 5
+
+  # Disable Docker plugin (not needed in Kubernetes)
+  docker:
+    enabled: false
+
+# Certificate lifecycle management
+certificate_lifecycle:
+  # Rotation threshold (rotate at 66.66% TTL consumed)
+  rotation_threshold: 0.6666
+
+  # Check interval for rotation (seconds)
+  check_interval: 30
+
+# Metrics and monitoring
+metrics:
+  # Enable metrics collection
+  enabled: true
+
+  # Metrics export interval (seconds)
+  interval: 30
+
+  # Export format: json (structured logging)
+  format: "json"

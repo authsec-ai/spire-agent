@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "spire-agent.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "spire-agent.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    agent:
+      tenant_id: {{ required "tenantId is required" .Values.tenantId | quote }}
+      node_id: "${NODE_NAME}"
+      data_dir: {{ .Values.agent.dataDir | quote }}
+      socket_path: {{ .Values.agent.socketPath | quote }}
+      renewal_threshold: {{ .Values.agent.renewalThreshold | quote }}
+
+    icp_service:
+      address: {{ .Values.icpService.address | quote }}
+      timeout: {{ .Values.icpService.timeout }}
+      max_retries: {{ .Values.icpService.maxRetries }}
+      retry_backoff: {{ .Values.icpService.retryBackoff }}
+
+    attestation:
+      type: "kubernetes"
+      kubernetes:
+        token_path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        cluster_name: {{ .Values.clusterName | quote }}
+      unix:
+        method: "procfs"
+
+    security:
+      cache_encryption_key: ""
+      cache_path: "{{ .Values.agent.dataDir }}/cache/svid.cache"
+
+    logging:
+      level: {{ .Values.logging.level | quote }}
+      format: {{ .Values.logging.format | quote }}
+
+    health:
+      enabled: {{ .Values.health.enabled }}
+      port: {{ .Values.health.port }}
+      bind_address: "0.0.0.0"
