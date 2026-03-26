@@ -1,0 +1,55 @@
+# SPIRE Agent Configuration - Unix/VM Deployment
+# This configuration is for running natively on a Linux VM or bare-metal host.
+# The agent uses /proc filesystem to attest workload processes.
+
+agent:
+  # Tenant identifier (provided by AuthSec)
+  tenant_id: "${TENANT_ID:-477e9f97-d8a9-442a-8d92-f771393fab66}"
+
+  # Unique node identifier — set via NODE_ID in agent.env
+  node_id: "${NODE_ID}"
+
+  # Data directory for persistent storage
+  data_dir: /var/lib/spire-agent
+
+  # Unix socket path for Workload API
+  socket_path: /run/spire/sockets/agent.sock
+
+  # Agent SVID renewal threshold
+  renewal_threshold: "6h"
+
+icp_service:
+  # ICP service address
+  address: "${ICP_SERVICE_ADDRESS:-https://prod.api.authsec.ai/spiresvc}"
+
+  # Trust bundle path (CA certificate for ICP service)
+  trust_bundle_path: /etc/spire-agent/trust-bundle.pem
+
+  # Connection timeout
+  timeout: 30
+
+  # Retry configuration
+  max_retries: 3
+  retry_backoff: 5
+
+attestation:
+  # Unix attestation - reads /proc for PID, UID, GID, exe path, sha256
+  type: "unix"
+
+  unix:
+    # Process verification method: procfs or systemd
+    method: "procfs"
+
+security:
+  cache_encryption_key: ""
+  cache_path: /var/lib/spire-agent/cache/svid.cache
+
+logging:
+  level: "info"
+  format: "json"
+  file_path: /var/log/spire-agent/agent.log
+
+health:
+  enabled: true
+  port: 8080
+  bind_address: "127.0.0.1"

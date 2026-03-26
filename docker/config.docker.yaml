@@ -1,0 +1,55 @@
+# SPIRE Agent Configuration - Docker Deployment
+# This configuration is optimized for running in Docker containers
+# with Docker-based workload attestation.
+
+agent:
+  # Tenant identifier (provided by AuthSec)
+  tenant_id: "${TENANT_ID:-477e9f97-d8a9-442a-8d92-f771393fab66}"
+
+  # Unique node identifier
+  node_id: "${NODE_ID:-docker-node-1}"
+
+  # Data directory for persistent storage
+  data_dir: /var/lib/spire-agent
+
+  # Unix socket path for Workload API
+  socket_path: /run/spire/sockets/agent.sock
+
+  # Agent SVID renewal threshold
+  renewal_threshold: "6h"
+
+icp_service:
+  # ICP service address
+  address: "${ICP_SERVICE_ADDRESS:-https://prod.api.authsec.ai/spiresvc}"
+
+  # Trust bundle path (CA certificate for ICP service)
+  trust_bundle_path: /etc/spire-agent/trust-bundle.pem
+
+  # Connection timeout
+  timeout: 30
+
+  # Retry configuration
+  max_retries: 3
+  retry_backoff: 5
+
+attestation:
+  # Docker attestation - collects container ID, image info, labels
+  type: "docker"
+
+  docker:
+    # Docker socket path (mounted from host)
+    socket_path: /var/run/docker.sock
+
+security:
+  cache_encryption_key: ""
+  cache_path: /var/lib/spire-agent/cache/svid.cache
+
+logging:
+  level: "${LOG_LEVEL:-info}"
+  format: "json"
+  file_path: ""
+
+health:
+  enabled: true
+  port: 8080
+  bind_address: "0.0.0.0"

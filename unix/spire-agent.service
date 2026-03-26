@@ -1,0 +1,47 @@
+[Unit]
+Description=SPIRE Agent - Workload Identity Service
+Documentation=https://github.com/authsec-ai/spire-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spire-agent
+Group=spire-agent
+
+# Environment
+EnvironmentFile=-/etc/spire-agent/agent.env
+
+# Working directory
+WorkingDirectory=/var/lib/spire-agent
+
+# Start command — standalone binary, no Python required
+ExecStart=/usr/local/bin/spire-agent -c /etc/spire-agent/config.yaml
+
+# Graceful shutdown
+ExecStop=/bin/kill -SIGTERM $MAINPID
+TimeoutStopSec=30
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/spire-agent /run/spire/sockets /var/log/spire-agent
+
+# /proc access required for Unix attestation
+ProcSubset=all
+ProtectProc=default
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
